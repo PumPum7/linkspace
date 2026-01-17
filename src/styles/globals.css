@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --border: 0 0% 90%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+      Ubuntu, sans-serif;
+    width: 700px;
+    height: 500px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+@layer components {
+  .sidebar-item {
+    @apply flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm;
+    @apply hover:bg-muted transition-colors;
+  }
+
+  .sidebar-item.active {
+    @apply bg-muted font-medium;
+  }
+
+  .sidebar-drop-before {
+    @apply border-t-2 border-primary;
+  }
+
+  .sidebar-drop-after {
+    @apply border-b-2 border-primary;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium;
+    @apply transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:opacity-90;
+  }
+
+  .btn-secondary {
+    @apply bg-muted text-foreground hover:bg-accent;
+  }
+
+  .icon-btn {
+    @apply p-1.5 rounded-md hover:bg-muted transition-colors cursor-pointer;
+    @apply inline-flex items-center justify-center;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 border rounded-md text-sm;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary/20;
+  }
+
+  .tree-node {
+    @apply relative;
+  }
+
+  .tree-node-content {
+    @apply flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer;
+    @apply hover:bg-muted transition-colors;
+  }
+
+  .tree-node-content.keyboard-focused {
+    @apply ring-2 ring-primary ring-offset-1 bg-muted;
+  }
+
+  .tree-node-content.keyboard-focused .tree-node-actions {
+    @apply opacity-100;
+  }
+
+  .tree-node-content:hover .tree-node-actions {
+    @apply opacity-100;
+  }
+
+  .tree-node-actions {
+    @apply ml-auto flex gap-1 opacity-0 transition-opacity;
+  }
+
+  .tree-node-icon {
+    @apply w-6 h-6 flex items-center justify-center rounded text-xs font-medium;
+    @apply bg-muted text-muted-foreground;
+  }
+
+  .tree-children {
+    @apply pl-4;
+  }
+
+  .tree-children.collapsed {
+    @apply hidden;
+  }
+
+  .drop-before {
+    @apply border-t-2 border-primary;
+  }
+
+  .drop-after {
+    @apply border-b-2 border-primary;
+  }
+
+  .drop-inside {
+    @apply bg-primary/10 rounded-md;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50;
+  }
+
+  .modal {
+    @apply bg-background rounded-lg shadow-xl w-full max-w-md p-6;
+  }
+
+  .mode-link-item {
+    @apply flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted cursor-pointer;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
