@@ -2,6 +2,7 @@ import { migrateData } from '@/lib/storage'
 import type { AppData } from '@/types'
 import { useRef, useState } from 'react'
 import { useApp } from './AppContext'
+import { useToast } from './Toast'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -9,6 +10,7 @@ interface SettingsModalProps {
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { data, updateData } = useApp()
+  const { showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
 
@@ -22,6 +24,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     link.download = 'linkspace-backup.json'
     link.click()
     URL.revokeObjectURL(url)
+    showToast({
+      title: 'Backup exported',
+      description: 'Your data has been downloaded.',
+      variant: 'success',
+    })
   }
 
   const handleImport = () => {
@@ -39,10 +46,19 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       migrateData(parsed)
 
       await updateData(() => parsed)
+      showToast({
+        title: 'Data imported',
+        description: 'Your backup was successfully restored.',
+        variant: 'success',
+      })
       onClose()
     } catch (error) {
       console.error('Failed to import data', error)
-      alert('Invalid backup file.')
+      showToast({
+        title: 'Import failed',
+        description: 'The selected file is not a valid backup.',
+        variant: 'error',
+      })
     } finally {
       setImporting(false)
       if (fileInputRef.current) {
@@ -52,8 +68,18 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-overlay"
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') onClose()
+      }}
+    >
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Settings</h2>
           <button type="button" onClick={onClose} className="icon-btn">
@@ -133,6 +159,7 @@ function CloseIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <path d="M18 6L6 18M6 6l12 12" />
     </svg>

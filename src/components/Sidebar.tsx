@@ -1,6 +1,7 @@
 import { DEFAULT_ICONS } from '@/lib/storage'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useApp } from './AppContext'
+import { PromptDialog } from './Dialogs'
 
 export function Sidebar() {
   const {
@@ -12,6 +13,9 @@ export function Sidebar() {
     setCurrentMode,
     updateData,
   } = useApp()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showWorkspacePrompt, setShowWorkspacePrompt] = useState(false)
+  const [showModePrompt, setShowModePrompt] = useState(false)
 
   // Drag state for workspaces
   const [draggedWorkspaceId, setDraggedWorkspaceId] = useState<string | null>(
@@ -29,13 +33,10 @@ export function Sidebar() {
     position: 'before' | 'after'
   } | null>(null)
 
-  const handleAddWorkspace = () => {
-    const name = prompt('Workspace name?')
-    if (!name) return
-
+  const handleCreateWorkspace = (name: string) => {
     const workspace = {
       id: crypto.randomUUID(),
-      name: name.trim(),
+      name,
       icon: DEFAULT_ICONS[Math.floor(Math.random() * DEFAULT_ICONS.length)],
       nodes: [],
     }
@@ -48,13 +49,10 @@ export function Sidebar() {
     setCurrentWorkspace(workspace.id)
   }
 
-  const handleAddMode = () => {
-    const name = prompt('Mode name?')
-    if (!name) return
-
+  const handleCreateMode = (name: string) => {
     const mode = {
       id: crypto.randomUUID(),
-      name: name.trim(),
+      name,
       linkIds: [],
     }
 
@@ -210,8 +208,33 @@ export function Sidebar() {
       : 'sidebar-drop-after'
   }
 
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const filteredWorkspaces = useMemo(() => {
+    if (!normalizedQuery) return data.workspaces
+    return data.workspaces.filter((workspace) =>
+      workspace.name.toLowerCase().includes(normalizedQuery),
+    )
+  }, [data.workspaces, normalizedQuery])
+
+  const filteredModes = useMemo(() => {
+    if (!normalizedQuery) return data.modes
+    return data.modes.filter((mode) =>
+      mode.name.toLowerCase().includes(normalizedQuery),
+    )
+  }, [data.modes, normalizedQuery])
+
   return (
     <aside className="w-48 border-r border-border flex flex-col h-full overflow-hidden">
+      <div className="p-3 border-b border-border">
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="input input-sm"
+          placeholder="Search workspaces or modes"
+          aria-label="Search workspaces or modes"
+        />
+      </div>
       {/* Workspaces Section */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-3">
@@ -221,41 +244,52 @@ export function Sidebar() {
             </span>
             <button
               type="button"
-              onClick={handleAddWorkspace}
+              onClick={() => setShowWorkspacePrompt(true)}
               className="icon-btn"
               title="Add workspace"
             >
               <PlusIcon />
             </button>
           </div>
-          <ul className="space-y-0.5">
-            {data.workspaces.map((workspace) => (
-              <li
-                key={workspace.id}
-                draggable
-                onDragStart={(e) => handleWorkspaceDragStart(e, workspace.id)}
-                onDragOver={(e) => handleWorkspaceDragOver(e, workspace.id)}
-                onDragLeave={handleWorkspaceDragLeave}
-                onDrop={(e) => handleWorkspaceDrop(e, workspace.id)}
-                onDragEnd={handleWorkspaceDragEnd}
-                className={getWorkspaceDropClass(workspace.id)}
-              >
-                <button
-                  type="button"
-                  onClick={() => setCurrentWorkspace(workspace.id)}
-                  className={`sidebar-item w-full text-left ${
-                    currentWorkspaceId === workspace.id &&
-                    activeView === 'workspace'
-                      ? 'active'
-                      : ''
-                  } ${draggedWorkspaceId === workspace.id ? 'opacity-50' : ''}`}
+          {filteredWorkspaces.length ? (
+            <ul className="space-y-0.5">
+              {filteredWorkspaces.map((workspace) => (
+                <li
+                  key={workspace.id}
+                  draggable
+                  onDragStart={(e) => handleWorkspaceDragStart(e, workspace.id)}
+                  onDragOver={(e) => handleWorkspaceDragOver(e, workspace.id)}
+                  onDragLeave={handleWorkspaceDragLeave}
+                  onDrop={(e) => handleWorkspaceDrop(e, workspace.id)}
+                  onDragEnd={handleWorkspaceDragEnd}
+                  className={getWorkspaceDropClass(workspace.id)}
                 >
-                  <span>{workspace.icon || '📁'}</span>
-                  <span className="truncate">{workspace.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentWorkspace(workspace.id)}
+                    className={`sidebar-item w-full text-left ${
+                      currentWorkspaceId === workspace.id &&
+                      activeView === 'workspace'
+                        ? 'active'
+                        : ''
+                    } ${draggedWorkspaceId === workspace.id ? 'opacity-50' : ''}`}
+                  >
+                    <span className="drag-handle" title="Drag to reorder">
+                      <GripIcon />
+                    </span>
+                    <span>{workspace.icon || '📁'}</span>
+                    <span className="truncate" title={workspace.name}>
+                      {workspace.name}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {normalizedQuery ? 'No matching workspaces.' : 'No workspaces yet.'}
+            </p>
+          )}
         </div>
 
         {/* Modes Section */}
@@ -266,42 +300,71 @@ export function Sidebar() {
             </span>
             <button
               type="button"
-              onClick={handleAddMode}
+              onClick={() => setShowModePrompt(true)}
               className="icon-btn"
               title="Add mode"
             >
               <PlusIcon />
             </button>
           </div>
-          <ul className="space-y-0.5">
-            {data.modes.map((mode) => (
-              <li
-                key={mode.id}
-                draggable
-                onDragStart={(e) => handleModeDragStart(e, mode.id)}
-                onDragOver={(e) => handleModeDragOver(e, mode.id)}
-                onDragLeave={handleModeDragLeave}
-                onDrop={(e) => handleModeDrop(e, mode.id)}
-                onDragEnd={handleModeDragEnd}
-                className={getModeDropClass(mode.id)}
-              >
-                <button
-                  type="button"
-                  onClick={() => setCurrentMode(mode.id)}
-                  className={`sidebar-item w-full text-left ${
-                    currentModeId === mode.id && activeView === 'mode'
-                      ? 'active'
-                      : ''
-                  } ${draggedModeId === mode.id ? 'opacity-50' : ''}`}
+          {filteredModes.length ? (
+            <ul className="space-y-0.5">
+              {filteredModes.map((mode) => (
+                <li
+                  key={mode.id}
+                  draggable
+                  onDragStart={(e) => handleModeDragStart(e, mode.id)}
+                  onDragOver={(e) => handleModeDragOver(e, mode.id)}
+                  onDragLeave={handleModeDragLeave}
+                  onDrop={(e) => handleModeDrop(e, mode.id)}
+                  onDragEnd={handleModeDragEnd}
+                  className={getModeDropClass(mode.id)}
                 >
-                  <span>⚡</span>
-                  <span className="truncate">{mode.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentMode(mode.id)}
+                    className={`sidebar-item w-full text-left ${
+                      currentModeId === mode.id && activeView === 'mode'
+                        ? 'active'
+                        : ''
+                    } ${draggedModeId === mode.id ? 'opacity-50' : ''}`}
+                  >
+                    <span className="drag-handle" title="Drag to reorder">
+                      <GripIcon />
+                    </span>
+                    <span>⚡</span>
+                    <span className="truncate" title={mode.name}>
+                      {mode.name}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {normalizedQuery ? 'No matching modes.' : 'No modes yet.'}
+            </p>
+          )}
         </div>
       </div>
+      <PromptDialog
+        open={showWorkspacePrompt}
+        onClose={() => setShowWorkspacePrompt(false)}
+        title="New workspace"
+        label="Workspace name"
+        placeholder="Personal"
+        confirmLabel="Create workspace"
+        onConfirm={handleCreateWorkspace}
+      />
+      <PromptDialog
+        open={showModePrompt}
+        onClose={() => setShowModePrompt(false)}
+        title="New mode"
+        label="Mode name"
+        placeholder="Morning routine"
+        confirmLabel="Create mode"
+        onConfirm={handleCreateMode}
+      />
     </aside>
   )
 }
@@ -315,8 +378,28 @@ function PlusIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
+function GripIcon() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <circle cx="5" cy="5" r="1.5" />
+      <circle cx="5" cy="10" r="1.5" />
+      <circle cx="5" cy="15" r="1.5" />
+      <circle cx="10" cy="5" r="1.5" />
+      <circle cx="10" cy="10" r="1.5" />
+      <circle cx="10" cy="15" r="1.5" />
     </svg>
   )
 }

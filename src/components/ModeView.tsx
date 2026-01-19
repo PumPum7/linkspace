@@ -1,10 +1,14 @@
 import { collectLinkEntries, getAllLinkIds } from '@/lib/storage'
+import { useState } from 'react'
 import { useApp } from './AppContext'
+import { ConfirmDialog } from './Dialogs'
 import { Favicon } from './Favicon'
 
 export function ModeView() {
   const { data, currentModeId, updateData, getMode } = useApp()
   const mode = getMode(currentModeId)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   if (!mode) {
     return (
@@ -24,7 +28,6 @@ export function ModeView() {
   }
 
   const handleDelete = () => {
-    if (!confirm('Delete this mode?')) return
     updateData((d) => ({
       ...d,
       modes: d.modes.filter((m) => m.id !== mode.id),
@@ -105,6 +108,19 @@ export function ModeView() {
   }
 
   const hasLinks = data.workspaces.some((w) => collectLinkEntries(w).length > 0)
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const matchesQuery = (entry: ReturnType<typeof collectLinkEntries>[0]) => {
+    if (!normalizedQuery) return true
+    const pathLabel = entry.path.join(' / ').toLowerCase()
+    return (
+      entry.node.title.toLowerCase().includes(normalizedQuery) ||
+      entry.node.url.toLowerCase().includes(normalizedQuery) ||
+      pathLabel.includes(normalizedQuery)
+    )
+  }
+  const hasVisibleEntries = data.workspaces.some((workspace) =>
+    collectLinkEntries(workspace).some(matchesQuery),
+  )
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -130,7 +146,7 @@ export function ModeView() {
           </button>
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => setShowDeleteDialog(true)}
             className="btn btn-secondary"
           >
             Delete
@@ -139,11 +155,19 @@ export function ModeView() {
       </div>
 
       {/* Description */}
-      <div className="p-4 border-b border-border">
+      <div className="p-4 border-b border-border space-y-3">
         <p className="text-sm text-muted-foreground">
           Select links from your workspaces to include in this mode:
         </p>
-        <div className="flex gap-2 mt-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="input input-sm flex-1"
+            placeholder="Search links"
+            aria-label="Search links"
+          />
           <button
             type="button"
             onClick={handleSelectAll}
@@ -167,18 +191,28 @@ export function ModeView() {
           <div className="text-center text-muted-foreground py-8">
             <p>Create folders/links in a workspace to configure this mode.</p>
           </div>
+        ) : !hasVisibleEntries ? (
+          <div className="text-center text-muted-foreground py-8">
+            <p>No links match your search.</p>
+          </div>
         ) : (
           <div className="space-y-4">
             {data.workspaces.map((workspace) => {
               const entries = collectLinkEntries(workspace)
               if (!entries.length) return null
 
+              const visibleEntries = entries.filter(matchesQuery)
+              if (!visibleEntries.length) return null
+
               return (
                 <div key={workspace.id} className="space-y-1">
-                  <div className="text-sm font-medium text-muted-foreground mb-2">
+                  <div
+                    className="text-sm font-medium text-muted-foreground mb-2"
+                    title={workspace.name}
+                  >
                     {workspace.icon || '📁'} {workspace.name}
                   </div>
-                  {entries.map((entry) => {
+                  {visibleEntries.map((entry) => {
                     const isChecked = mode.linkIds.includes(entry.node.id)
                     const pathLabel = entry.path.length
                       ? `${entry.path.join(' / ')} · `
@@ -199,10 +233,16 @@ export function ModeView() {
                           title={entry.node.title}
                           size={16}
                         />
-                        <span className="flex-1 truncate">
+                        <span
+                          className="flex-1 truncate"
+                          title={entry.node.title}
+                        >
                           {entry.node.title}
                         </span>
-                        <span className="text-xs text-muted-foreground truncate">
+                        <span
+                          className="text-xs text-muted-foreground truncate"
+                          title={`${pathLabel}${entry.node.url}`}
+                        >
                           {pathLabel}
                           {entry.node.url}
                         </span>
@@ -215,6 +255,15 @@ export function ModeView() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        title="Delete this mode?"
+        description="This will remove the mode but keep your links."
+        confirmLabel="Delete mode"
+        confirmVariant="danger"
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }
@@ -228,6 +277,7 @@ function PlayIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <polygon points="5 3 19 12 5 21 5 3" />
     </svg>

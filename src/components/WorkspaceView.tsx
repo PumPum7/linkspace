@@ -14,19 +14,28 @@ import {
   removeNodeById,
 } from '@/lib/storage'
 import type { LinkNode, TreeNode } from '@/types'
-import { useCallback, useState } from 'react'
+import { useCallback, useId, useState } from 'react'
 import { useApp } from './AppContext'
+import { ConfirmDialog, PromptDialog } from './Dialogs'
 import { Favicon } from './Favicon'
 import { IconPickerModal } from './IconPickerModal'
+import { useToast } from './Toast'
 
 export function WorkspaceView() {
-  const { data, currentWorkspaceId, updateData, getWorkspace } = useApp()
+  const { currentWorkspaceId, updateData, getWorkspace } = useApp()
   const workspace = getWorkspace(currentWorkspaceId)
+  const { showToast } = useToast()
 
   const [isAddingLink, setIsAddingLink] = useState(false)
   const [editingLink, setEditingLink] = useState<LinkNode | null>(null)
   const [linkParentId, setLinkParentId] = useState<string | null>(null)
   const [showIconPicker, setShowIconPicker] = useState(false)
+  const [showWorkspaceDelete, setShowWorkspaceDelete] = useState(false)
+  const [showFolderPrompt, setShowFolderPrompt] = useState(false)
+  const [folderParentId, setFolderParentId] = useState<string | null>(null)
+  const [pendingDeleteFolderId, setPendingDeleteFolderId] = useState<
+    string | null
+  >(null)
 
   const handleReorder = useCallback(
     (dragId: string, targetId: string | null, position: DropPosition) => {
@@ -100,13 +109,11 @@ export function WorkspaceView() {
     }))
   }
 
-  const handleDelete = () => {
-    if (!confirm('Delete this workspace and all of its content?')) return
-
+  const handleDeleteWorkspace = () => {
     const linkIds: string[] = []
-    collectLinkEntries(workspace).forEach((entry) =>
-      linkIds.push(entry.node.id),
-    )
+    for (const entry of collectLinkEntries(workspace)) {
+      linkIds.push(entry.node.id)
+    }
 
     updateData((d) => {
       const newModes = [...d.modes]
@@ -127,10 +134,7 @@ export function WorkspaceView() {
     })
   }
 
-  const handleAddFolder = (parentId: string | null = null) => {
-    const name = prompt('Folder name?')
-    if (!name) return
-
+  const handleCreateFolder = (name: string) => {
     updateData((d) => ({
       ...d,
       workspaces: d.workspaces.map((w) => {
@@ -139,11 +143,12 @@ export function WorkspaceView() {
           ...w,
           nodes: JSON.parse(JSON.stringify(w.nodes)),
         }
-        const container = getNodesContainer(newWorkspace, parentId)
-        container.push(createFolderNode(name.trim()))
+        const container = getNodesContainer(newWorkspace, folderParentId)
+        container.push(createFolderNode(name))
         return newWorkspace
       }),
     }))
+    setFolderParentId(null)
   }
 
   const handleSaveLink = (title: string, url: string) => {
@@ -203,8 +208,6 @@ export function WorkspaceView() {
   }
 
   const handleDeleteFolder = (folderId: string) => {
-    if (!confirm('Delete this folder and everything inside it?')) return
-
     const info = findNodeById(workspace.nodes, folderId)
     if (!info || info.node.type !== 'folder') return
 
@@ -315,13 +318,26 @@ export function WorkspaceView() {
         currentWindow: true,
       })
       if (!tab?.url) {
-        alert('No active tab found.')
+        showToast({
+          title: 'No active tab found',
+          description: 'Open a tab to save it to this workspace.',
+          variant: 'error',
+        })
         return
       }
       handleSaveLink(tab.title || tab.url, tab.url)
+      showToast({
+        title: 'Saved current tab',
+        description: tab.title || tab.url,
+        variant: 'success',
+      })
     } catch (error) {
       console.error('Failed to capture current tab', error)
-      alert('Unable to capture the current tab.')
+      showToast({
+        title: 'Unable to capture the current tab',
+        description: 'Please try again.',
+        variant: 'error',
+      })
     }
   }
 
@@ -343,12 +359,13 @@ export function WorkspaceView() {
             value={workspace.name}
             onChange={(e) => handleRename(e.target.value)}
             className="text-lg font-semibold bg-transparent border-none focus:outline-none"
+            aria-label="Workspace name"
           />
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => setShowWorkspaceDelete(true)}
             className="btn btn-secondary"
           >
             Delete
@@ -360,7 +377,10 @@ export function WorkspaceView() {
       <div className="flex items-center gap-2 p-3 border-b border-border">
         <button
           type="button"
-          onClick={() => handleAddFolder(null)}
+          onClick={() => {
+            setShowFolderPrompt(true)
+            setFolderParentId(null)
+          }}
           className="btn btn-secondary"
         >
           Add folder
@@ -410,7 +430,31 @@ export function WorkspaceView() {
       >
         {workspace.nodes.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
-            <p>No folders or links yet. Use the toolbar to create them.</p>
+            <p className="mb-3">
+              No folders or links yet. Use the toolbar to create them.
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFolderPrompt(true)
+                  setFolderParentId(null)
+                }}
+                className="btn btn-secondary"
+              >
+                Add folder
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingLink(true)
+                  setLinkParentId(null)
+                }}
+                className="btn btn-primary"
+              >
+                Add link
+              </button>
+            </div>
           </div>
         ) : (
           <ul className="space-y-0.5">
@@ -426,13 +470,16 @@ export function WorkspaceView() {
                 setIsAddingLink(true)
               }}
               onDeleteLink={handleDeleteLink}
-              onDeleteFolder={handleDeleteFolder}
+              onDeleteFolder={(folderId) => setPendingDeleteFolderId(folderId)}
               onToggleFolder={handleToggleFolder}
               onAddLink={(parentId) => {
                 setIsAddingLink(true)
                 setLinkParentId(parentId)
               }}
-              onAddFolder={handleAddFolder}
+              onAddFolder={(parentId) => {
+                setShowFolderPrompt(true)
+                setFolderParentId(parentId)
+              }}
               dragHandlers={dragHandlers}
             />
           </ul>
@@ -459,6 +506,41 @@ export function WorkspaceView() {
           onClose={() => setShowIconPicker(false)}
         />
       )}
+      <PromptDialog
+        open={showFolderPrompt}
+        onClose={() => {
+          setShowFolderPrompt(false)
+          setFolderParentId(null)
+        }}
+        title="New folder"
+        label="Folder name"
+        placeholder="Reading list"
+        confirmLabel="Create folder"
+        onConfirm={handleCreateFolder}
+      />
+      <ConfirmDialog
+        open={showWorkspaceDelete}
+        onClose={() => setShowWorkspaceDelete(false)}
+        title="Delete this workspace?"
+        description="This will remove all folders and links in this workspace."
+        confirmLabel="Delete workspace"
+        confirmVariant="danger"
+        onConfirm={handleDeleteWorkspace}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteFolderId)}
+        onClose={() => setPendingDeleteFolderId(null)}
+        title="Delete this folder?"
+        description="This will delete the folder and everything inside it."
+        confirmLabel="Delete folder"
+        confirmVariant="danger"
+        onConfirm={() => {
+          if (pendingDeleteFolderId) {
+            handleDeleteFolder(pendingDeleteFolderId)
+          }
+          setPendingDeleteFolderId(null)
+        }}
+      />
     </div>
   )
 }
@@ -521,6 +603,9 @@ function NodeList({
           >
             {node.type === 'folder' ? (
               <>
+                <span className="drag-handle" title="Drag to reorder">
+                  <GripIcon />
+                </span>
                 <button
                   type="button"
                   onClick={() => onToggleFolder(node.id)}
@@ -529,7 +614,9 @@ function NodeList({
                   <ChevronIcon />
                 </button>
                 <span className="tree-node-icon">📁</span>
-                <span className="flex-1 truncate">{node.name}</span>
+                <span className="flex-1 truncate" title={node.name}>
+                  {node.name}
+                </span>
                 <div className="tree-node-actions">
                   <button
                     type="button"
@@ -559,17 +646,26 @@ function NodeList({
               </>
             ) : (
               <>
+                <span className="drag-handle" title="Drag to reorder">
+                  <GripIcon />
+                </span>
                 <span className="w-4" />
                 <Favicon url={node.url} title={node.title} size={20} />
-                <div
-                  className="flex-1 min-w-0 cursor-pointer"
+                <button
+                  type="button"
+                  className="flex-1 min-w-0 text-left"
                   onClick={() => onOpenLink(node.url)}
                 >
-                  <div className="truncate">{node.title}</div>
-                  <div className="text-xs text-muted-foreground truncate">
+                  <div className="truncate" title={node.title}>
+                    {node.title}
+                  </div>
+                  <div
+                    className="text-xs text-muted-foreground truncate"
+                    title={node.url}
+                  >
                     {node.url}
                   </div>
-                </div>
+                </button>
                 <div className="tree-node-actions">
                   <button
                     type="button"
@@ -633,21 +729,35 @@ interface LinkModalProps {
 }
 
 function LinkModal({ link, onSave, onClose }: LinkModalProps) {
+  const titleId = useId()
+  const urlId = useId()
   const [title, setTitle] = useState(link?.title || '')
   const [url, setUrl] = useState(link?.url || '')
+  const [error, setError] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || !url.trim()) {
-      alert('Please fill in both the title and URL')
+      setError('Please fill in both the title and URL.')
       return
     }
+    setError('')
     onSave(title.trim(), url.trim())
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-overlay"
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') onClose()
+      }}
+    >
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">
             {link ? 'Edit Link' : 'Add Link'}
@@ -658,26 +768,38 @@ function LinkModal({ link, onSave, onClose }: LinkModalProps) {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Title</label>
+            <label htmlFor={titleId} className="block text-sm font-medium mb-1">
+              Title
+            </label>
             <input
+              id={titleId}
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                if (error) setError('')
+              }}
               className="input"
               placeholder="My Link"
-              autoFocus
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">URL</label>
+            <label htmlFor={urlId} className="block text-sm font-medium mb-1">
+              URL
+            </label>
             <input
+              id={urlId}
               type="text"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value)
+                if (error) setError('')
+              }}
               className="input"
               placeholder="https://example.com"
             />
           </div>
+          {error ? <div className="text-xs text-red-600">{error}</div> : null}
           <button type="submit" className="btn btn-primary w-full">
             Save Link
           </button>
@@ -697,6 +819,7 @@ function PlusIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <path d="M12 5v14M5 12h14" />
     </svg>
@@ -712,6 +835,7 @@ function ChevronIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <polyline points="6 9 12 15 18 9" />
     </svg>
@@ -727,6 +851,7 @@ function FolderPlusIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
       <line x1="12" y1="11" x2="12" y2="17" />
@@ -744,6 +869,7 @@ function TrashIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <path d="M3 6h18M9 6V4h6v2m-1 0v12a2 2 0 01-2 2H8a2 2 0 01-2-2V6h10" />
     </svg>
@@ -759,6 +885,7 @@ function ExternalLinkIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
       <polyline points="15 3 21 3 21 9" />
@@ -776,6 +903,7 @@ function EditIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <path d="M12 20h9M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z" />
     </svg>
@@ -791,8 +919,28 @@ function CloseIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
+      aria-hidden="true"
     >
       <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  )
+}
+
+function GripIcon() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <circle cx="5" cy="5" r="1.5" />
+      <circle cx="5" cy="10" r="1.5" />
+      <circle cx="5" cy="15" r="1.5" />
+      <circle cx="10" cy="5" r="1.5" />
+      <circle cx="10" cy="10" r="1.5" />
+      <circle cx="10" cy="15" r="1.5" />
     </svg>
   )
 }
