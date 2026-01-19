@@ -90,17 +90,8 @@ export function WorkspaceView() {
     onReorder: handleReorder,
   })
 
-  if (!workspace) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <p className="mb-4">Create a workspace to get started</p>
-        </div>
-      </div>
-    )
-  }
-
   const handleRename = (newName: string) => {
+    if (!workspace) return
     updateData((d) => ({
       ...d,
       workspaces: d.workspaces.map((w) =>
@@ -110,6 +101,7 @@ export function WorkspaceView() {
   }
 
   const handleDeleteWorkspace = () => {
+    if (!workspace) return
     const linkIds: string[] = []
     for (const entry of collectLinkEntries(workspace)) {
       linkIds.push(entry.node.id)
@@ -135,6 +127,7 @@ export function WorkspaceView() {
   }
 
   const handleCreateFolder = (name: string) => {
+    if (!workspace) return
     updateData((d) => ({
       ...d,
       workspaces: d.workspaces.map((w) => {
@@ -152,6 +145,7 @@ export function WorkspaceView() {
   }
 
   const handleSaveLink = (title: string, url: string) => {
+    if (!workspace) return
     let finalUrl = url.trim()
     if (!/^https?:\/\//i.test(finalUrl)) {
       finalUrl = `https://${finalUrl}`
@@ -187,6 +181,7 @@ export function WorkspaceView() {
   }
 
   const handleDeleteLink = (linkId: string) => {
+    if (!workspace) return
     updateData((d) => {
       const newModes = [...d.modes]
       removeLinkIdsFromModes(newModes, [linkId])
@@ -208,6 +203,7 @@ export function WorkspaceView() {
   }
 
   const handleDeleteFolder = (folderId: string) => {
+    if (!workspace) return
     const info = findNodeById(workspace.nodes, folderId)
     if (!info || info.node.type !== 'folder') return
 
@@ -235,6 +231,7 @@ export function WorkspaceView() {
   }
 
   const handleToggleFolder = (folderId: string) => {
+    if (!workspace) return
     updateData((d) => ({
       ...d,
       workspaces: d.workspaces.map((w) => {
@@ -253,15 +250,26 @@ export function WorkspaceView() {
   }
 
   const { focusedId } = useKeyboardNavigation({
-    nodes: workspace.nodes,
+    nodes: workspace?.nodes || [],
     onOpenLink: (url) => chrome.tabs.create({ url }),
     onDeleteLink: handleDeleteLink,
     onDeleteFolder: handleDeleteFolder,
     onToggleFolder: handleToggleFolder,
-    enabled: !isAddingLink && !showIconPicker,
+    enabled: Boolean(workspace) && !isAddingLink && !showIconPicker,
   })
 
+  if (!workspace) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-muted-foreground">
+        <div className="text-center">
+          <p className="mb-4">Create a workspace to get started</p>
+        </div>
+      </div>
+    )
+  }
+
   const handleExpandAll = () => {
+    if (!workspace) return
     updateData((d) => ({
       ...d,
       workspaces: d.workspaces.map((w) => {
@@ -285,6 +293,7 @@ export function WorkspaceView() {
   }
 
   const handleCollapseAll = () => {
+    if (!workspace) return
     updateData((d) => ({
       ...d,
       workspaces: d.workspaces.map((w) => {
